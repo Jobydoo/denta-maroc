@@ -1,0 +1,444 @@
+// Prisma Schema for DentaMaroc
+// Optimized for PostgreSQL (Neon / Supabase) & Serverless Vercel deployment
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  ASSISTANT
+  PROTHESISTE
+}
+
+enum ToothStatus {
+  SAINE
+  CARIE
+  DEVITALISEE
+  COURONNE
+  BRIDGE
+  IMPLANT
+  ABSENTE
+  A_EXTRAIRE
+}
+
+enum AppointmentStatus {
+  PLANIFIE
+  CONFIRME
+  SALLE_ATTENTE
+  AU_FAUTEUIL
+  TERMINE
+  ABSENT
+}
+
+enum CareType {
+  CONSULTATION
+  SOIN
+  PROTHESE
+  CHIRURGIE
+  IMPLANTOLOGIE
+  ORTHODONTIE
+  URGENCE
+  CONTROLE
+}
+
+enum ProtheseType {
+  COURONNE_ZIRCONE
+  COURONNE_CERAMO_METALLIQUE
+  BRIDGE_CERAMIQUE
+  STELLITE
+  PROTHESE_COMPLETE
+  GOUTTIERE
+  INLAY_ONLAY
+  FACETTE_CERAMIQUE
+  PILIER_IMPLANTAIRE
+}
+
+enum ProtheseStatus {
+  EMPREINTE_PRISE
+  ENVOYE_LABO
+  ESSAYAGE_PREVU
+  RETOUCHE
+  LIVRE_CABINET
+  POSE
+}
+
+enum PaymentMethod {
+  ESPECES
+  CHEQUE
+  VIREMENT
+  CARTE_BANCAIRE
+}
+
+enum CheckStatus {
+  NON_APPLICABLE
+  EN_PORTEFEUILLE
+  ENCAISSE
+  REJETE
+}
+
+enum InvoiceStatus {
+  IMPAYEE
+  PARTIELLEMENT_PAYEE
+  SOLDEE
+  ANNULEE
+}
+
+enum QuoteStatus {
+  BROUILLON
+  EN_ATTENTE
+  ACCEPTE
+  REFUSE
+}
+
+enum ExpenseCategory {
+  LOYER
+  SALAIRES
+  LABO_PROTHESE
+  FOURNITURES_DENTAIRES
+  EAU_ELEC_INTERNET
+  MAINTENANCE
+  IMPOTS_TAXES
+  AUTRE
+}
+
+enum StockCategory {
+  ANESTHESIE
+  RESTAURATION
+  ENDODONTIE
+  HYGIENE_PROTECTION
+  CHIRURGIE
+  EMPREINTE
+  AUTRE
+}
+
+enum FileType {
+  PANORAMIQUE
+  RETRO_ALVEOLAIRE
+  SCANNER_3D
+  PHOTO_AVANT_APRES
+  ORDONNANCE
+  DEVIS_SIGNE
+  AUTRE
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(ASSISTANT)
+  phone        String?
+  specialty    String?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  treatments   Treatment[]
+  receivedPayments Payment[]
+}
+
+model ClinicSettings {
+  id              String   @id @default(cuid())
+  name            String   @default("Cabinet Dentaire Dr. Mehdi Alami")
+  doctorName      String   @default("Dr. Mehdi Alami")
+  specialty       String   @default("Chirurgien-Dentiste - Implantologie & Esthétique")
+  address         String   @default("145 Boulevard d'Anfa, 4ème étage, Maarif")
+  city            String   @default("Casablanca")
+  phone           String   @default("+212 5 22 20 30 40")
+  whatsappNumber  String   @default("+212 6 61 23 45 67")
+  email           String   @default("contact@cabinet-alami.ma")
+  ice             String   @default("002345678000045")
+  taxId           String   @default("45879201") // Identifiant Fiscal (IF)
+  patente         String   @default("32415089")
+  inpe            String   @default("098765432") // Identifiant National des Professionnels de Santé
+  logoUrl         String?
+  googleReviewUrl String   @default("https://g.page/r/example-review-dentiste/review")
+  defaultCurrency String   @default("MAD")
+  updatedAt       DateTime @updatedAt
+}
+
+model Patient {
+  id                String       @id @default(cuid())
+  cin               String?      @unique // Carte d'Identité Nationale
+  firstName         String
+  lastName          String
+  gender            String       @default("M") // M or F
+  dateOfBirth       DateTime
+  phone             String
+  email             String?
+  address           String?
+  city              String       @default("Casablanca")
+  occupation        String?
+
+  // Couverture Médicale & Mutuelle
+  mutualType        String       @default("CNOPS") // CNOPS, CNSS, AMO, FAR, AXA, RMA, SAHAM, etc.
+  mutualNumber      String?
+  mutualAffiliation String?
+
+  // Anamnèse Médicale Critique (Affichage rouge prioritaire)
+  allergies         String?      // Pénicilline, Latex, etc.
+  chronicDiseases   String?      // Diabète, HTA, etc.
+  heartCondition    Boolean      @default(false)
+  bleedingDisorder  Boolean      @default(false) // Anticoagulants / Sintrom
+  isPregnant        Boolean      @default(false)
+  biphosphonates    Boolean      @default(false) // Risque ostéonécrose
+  medicalNotes      String?
+
+  status            String       @default("ACTIF") // ACTIF, ARCHIVE
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  teethConditions   ToothCondition[]
+  treatments        Treatment[]
+  appointments      Appointment[]
+  quotes            Quote[]
+  invoices          Invoice[]
+  payments          Payment[]
+  protheses         ProtheseOrder[]
+  files             PatientFile[]
+
+  @@index([lastName, firstName])
+  @@index([phone])
+  @@index([cin])
+}
+
+model ToothCondition {
+  id            String      @id @default(cuid())
+  patientId     String
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  toothNumber   Int         // 11-48, 51-85 (Notation FDI)
+  status        ToothStatus @default(SAINE)
+  surfaces      String?     // JSON string array e.g. ["occlusal", "mesial"]
+  notes         String?
+  diagnosisDate DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([patientId, toothNumber])
+  @@index([patientId])
+}
+
+model ProcedureCatalog {
+  id              String   @id @default(cuid())
+  code            String   @unique // e.g. D20, D50, SC01
+  name            String
+  category        String   // SOINS_CONSERVATEURS, PROTHESES, IMPLANTOLOGIE, etc.
+  defaultPrice    Float    // in MAD
+  estimatedLabCost Float   @default(0) // in MAD
+  amoCode         String?  // Code nomenclature marocaine
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+}
+
+model Treatment {
+  id              String    @id @default(cuid())
+  patientId       String
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  toothNumber     Int?
+  procedureName   String
+  category        String    @default("SOINS_CONSERVATEURS")
+  price           Float     // MAD
+  practitionerId  String?
+  practitioner    User?     @relation(fields: [practitionerId], references: [id])
+  date            DateTime  @default(now())
+  status          String    @default("TERMINE") // PLANIFIE, EN_COURS, TERMINE, ANNULE
+  clinicalNotes   String?
+  createdAt       DateTime  @default(now())
+
+  @@index([patientId])
+}
+
+model Appointment {
+  id           String            @id @default(cuid())
+  patientId    String
+  patient      Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId     String?
+  title        String
+  date         DateTime
+  startTime    String            // "09:30"
+  endTime      String            // "10:15"
+  status       AppointmentStatus @default(PLANIFIE)
+  careType     CareType          @default(CONSULTATION)
+  notes        String?
+  reminderSent Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([patientId])
+  @@index([date])
+  @@index([status])
+}
+
+model Quote {
+  id          String      @id @default(cuid())
+  quoteNumber String      @unique // e.g. "DEV-2026-0012"
+  patientId   String
+  patient     Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  totalAmount Float
+  discount    Float       @default(0)
+  finalAmount Float
+  status      QuoteStatus @default(EN_ATTENTE)
+  validUntil  DateTime
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  items       QuoteItem[]
+  invoices    Invoice[]
+
+  @@index([patientId])
+}
+
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  toothNumber Int?
+  quantity    Int      @default(1)
+  unitPrice   Float
+  totalPrice  Float
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  invoiceNumber     String        @unique // e.g. "FAC-2026-0045"
+  patientId         String
+  patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  quoteId           String?
+  quote             Quote?        @relation(fields: [quoteId], references: [id])
+  totalAmount       Float
+  paidAmount        Float         @default(0)
+  remainingAmount   Float
+  status            InvoiceStatus @default(IMPAYEE)
+  mutualType        String?
+  mutualClaimNumber String?
+  issueDate         DateTime      @default(now())
+  dueDate           DateTime?
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  items             InvoiceItem[]
+  payments          Payment[]
+
+  @@index([patientId])
+  @@index([status])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  toothNumber Int?
+  quantity    Int      @default(1)
+  unitPrice   Float
+  totalPrice  Float
+  amoCode     String?
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  paymentNumber     String        @unique // e.g. "REC-2026-0120"
+  invoiceId         String?
+  invoice           Invoice?      @relation(fields: [invoiceId], references: [id])
+  patientId         String
+  patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  amount            Float
+  method            PaymentMethod @default(ESPECES)
+  checkNumber       String?
+  checkBank         String?       // Attijariwafa, BCP, BMCE, CIH, CDM, etc.
+  checkDueDate      DateTime?
+  checkStatus       CheckStatus   @default(NON_APPLICABLE)
+  receiptGenerated  Boolean       @default(true)
+  paymentDate       DateTime      @default(now())
+  notes             String?
+  receivedByUserId  String?
+  receivedBy        User?         @relation(fields: [receivedByUserId], references: [id])
+  createdAt         DateTime      @default(now())
+
+  @@index([patientId])
+  @@index([invoiceId])
+  @@index([paymentDate])
+  @@index([checkStatus])
+}
+
+model ProtheseOrder {
+  id               String         @id @default(cuid())
+  orderNumber      String         @unique // e.g. "LAB-2026-0023"
+  patientId        String
+  patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  labName          String         // e.g. "Laboratoire Atlas Dental Casablanca"
+  protheseType     ProtheseType   @default(COURONNE_ZIRCONE)
+  teethNumbers     String         // e.g. "14, 15, 16"
+  vitaShade        String         @default("A2") // Teinte Vita A1, A2, A3, B1, etc.
+  status           ProtheseStatus @default(EMPREINTE_PRISE)
+  impressionDate   DateTime       @default(now())
+  sentDate         DateTime?
+  tryInDate        DateTime?
+  deliveryDate     DateTime?
+  fittingDate      DateTime?
+  clinicPrice      Float          @default(0) // Facturé au patient
+  labCost          Float          @default(0) // Facturé par le labo
+  labInvoiceNumber String?
+  instructions     String?
+  isPaidToLab      Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([patientId])
+  @@index([status])
+}
+
+model Expense {
+  id            String          @id @default(cuid())
+  title         String
+  category      ExpenseCategory @default(AUTRE)
+  amount        Float           // MAD
+  date          DateTime        @default(now())
+  supplier      String?
+  paymentMethod PaymentMethod   @default(VIREMENT)
+  receiptUrl    String?
+  notes         String?
+  createdAt     DateTime        @default(now())
+
+  @@index([date])
+  @@index([category])
+}
+
+model StockItem {
+  id                String        @id @default(cuid())
+  name              String
+  category          StockCategory @default(AUTRE)
+  currentQuantity   Int           @default(0)
+  minAlertThreshold Int           @default(5)
+  unit              String        @default("boîtes") // boîtes, seringues, flacons
+  expiryDate        DateTime?
+  supplier          String?
+  unitCost          Float?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([category])
+}
+
+model PatientFile {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title     String
+  fileType  FileType @default(PANORAMIQUE)
+  fileUrl   String
+  fileSize  Int?     // bytes
+  mimeType  String?
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+}
