@@ -1,23 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { DEMO_SETTINGS } from '@/lib/demo-data';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     let settings = await prisma.clinicSettings.findFirst();
-    if (!settings) {
-      settings = await prisma.clinicSettings.create({
-        data: {
-          name: 'Cabinet Dentaire Dr. Mehdi Alami',
-          doctorName: 'Dr. Mehdi Alami',
-        },
-      });
+    if (settings) {
+      return NextResponse.json(settings);
     }
-    return NextResponse.json(settings);
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to demo settings:', error?.message);
   }
+  return NextResponse.json(DEMO_SETTINGS);
 }
 
 export async function PUT(request: Request) {

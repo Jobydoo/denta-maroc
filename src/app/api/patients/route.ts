@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { DEMO_PATIENTS } from '@/lib/demo-data';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const q = searchParams.get('q')?.toLowerCase() || '';
+  const { searchParams } = new URL(request.url);
+  const q = searchParams.get('q')?.toLowerCase() || '';
 
+  try {
     const patients = await prisma.patient.findMany({
       where: q
         ? {
@@ -51,8 +52,17 @@ export async function GET(request: Request) {
 
     return NextResponse.json(formatted);
   } catch (error: any) {
-    console.error('Error fetching patients:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to demo patients:', error?.message);
+    const filtered = q
+      ? DEMO_PATIENTS.filter(
+          (p) =>
+            p.firstName.toLowerCase().includes(q) ||
+            p.lastName.toLowerCase().includes(q) ||
+            p.phone.includes(q) ||
+            (p.cin && p.cin.toLowerCase().includes(q))
+        )
+      : DEMO_PATIENTS;
+    return NextResponse.json(filtered);
   }
 }
 

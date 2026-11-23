@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ProtheseStatus, ProtheseType } from '@prisma/client';
+import { DEMO_PROTHESES } from '@/lib/demo-data';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const patientId = searchParams.get('patientId');
-    const status = searchParams.get('status') as ProtheseStatus | null;
+  const { searchParams } = new URL(request.url);
+  const patientId = searchParams.get('patientId');
+  const status = searchParams.get('status') as ProtheseStatus | null;
 
+  try {
     const orders = await prisma.protheseOrder.findMany({
       where: {
         ...(patientId ? { patientId } : {}),
@@ -30,8 +31,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json(orders);
   } catch (error: any) {
-    console.error('Error fetching protheses:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to demo protheses:', error?.message);
+    return NextResponse.json(DEMO_PROTHESES);
   }
 }
 
