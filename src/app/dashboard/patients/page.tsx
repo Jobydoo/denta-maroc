@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { PatientSummary } from '@/types';
 import { formatMAD, calculateAge } from '@/lib/utils';
 import QuickContactButtons from '@/components/patients/QuickContactButtons';
 import PatientFormModal from '@/components/patients/PatientFormModal';
@@ -14,7 +13,8 @@ import {
   Filter,
   User,
   CreditCard,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckCircle2,
 } from 'lucide-react';
 
 export default function PatientsListPage() {
@@ -23,6 +23,12 @@ export default function PatientsListPage() {
   const [mutualFilter, setMutualFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const fetchPatients = async () => {
     try {
@@ -46,13 +52,43 @@ export default function PatientsListPage() {
   }, [searchQuery]);
 
   const handleCreatePatient = async (data: any) => {
-    const res = await fetch('/api/patients', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) {
-      fetchPatients();
+    // 1. Mise à jour optimiste immédiate dans l'interface
+    const tempId = `pat-${Date.now()}`;
+    const newPatient = {
+      ...data,
+      id: tempId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      totalInvoiced: 0,
+      totalPaid: 0,
+      remainingDue: 0,
+      teethConditions: [],
+      treatments: [],
+      invoices: [],
+      payments: [],
+      quotes: [],
+      protheses: [],
+      files: [],
+    };
+
+    setPatients((prev) => [newPatient, ...prev]);
+    showToast(`✓ Patient "${data.firstName} ${data.lastName}" ajouté avec succès !`);
+
+    // 2. Persistance via l'API
+    try {
+      const res = await fetch('/api/patients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setPatients((prev) =>
+          prev.map((p) => (p.id === tempId ? { ...newPatient, ...saved } : p))
+        );
+      }
+    } catch (e) {
+      console.error('Erreur API patients:', e);
     }
   };
 
@@ -62,7 +98,15 @@ export default function PatientsListPage() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 font-bold text-xs animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -148,36 +192,32 @@ export default function PatientsListPage() {
                 >
                   {/* Info principale */}
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-slate-700 text-base shadow-sm shrink-0">
-                      {p.firstName.charAt(0)}
-                      {p.lastName.charAt(0)}
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500/10 to-teal-500/10 border border-sky-500/20 text-sky-700 flex items-center justify-center font-black text-sm">
+                      {p.firstName[0]}
+                      {p.lastName[0]}
                     </div>
 
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Link
                           href={`/dashboard/patients/${p.id}`}
-                          className="font-black text-sm text-slate-900 hover:text-sky-600 transition-colors flex items-center gap-1"
+                          className="font-black text-slate-900 hover:text-sky-600 transition-colors text-sm"
                         >
-                          <span>
-                            {p.firstName} {p.lastName}
-                          </span>
-                          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                          {p.firstName} {p.lastName}
                         </Link>
 
                         {p.cin && (
-                          <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                          <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded bg-slate-900 text-white">
                             CIN: {p.cin}
                           </span>
                         )}
 
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">
                           {p.mutualType}
                         </span>
 
-                        {/* Alerte Médicale Rouge */}
                         {hasAlert && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-black tracking-wider uppercase border border-rose-300">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 animate-pulse">
                             <ShieldAlert className="w-3 h-3 text-rose-600" />
                             Alerte Médicale
                           </span>
@@ -186,29 +226,26 @@ export default function PatientsListPage() {
 
                       <p className="text-xs text-slate-500">
                         {calculateAge(p.dateOfBirth)} ans • Tél :{' '}
-                        <strong className="text-slate-700 font-mono">{p.phone}</strong> • {p.city}
+                        <span className="font-mono font-bold text-slate-700">{p.phone}</span>
+                        {p.city && ` • ${p.city}`}
                       </p>
 
-                      {/* Résumé de l'alerte médicale si présente */}
-                      {hasAlert && (
-                        <p className="text-[11px] text-rose-600 font-bold">
-                          ⚠️ {p.allergies ? `Allergie: ${p.allergies}` : ''}{' '}
-                          {p.bleedingDisorder ? '• Anticoagulant' : ''}{' '}
-                          {p.isPregnant ? '• Grossesse' : ''}{' '}
-                          {p.chronicDiseases ? `• ${p.chronicDiseases}` : ''}
+                      {p.allergies && (
+                        <p className="text-[11px] text-rose-600 font-semibold">
+                          ⚠️ Allergies : {p.allergies}
                         </p>
                       )}
                     </div>
                   </div>
 
-                  {/* Situation Financière & Actions Rapides */}
-                  <div className="flex items-center justify-between lg:justify-end gap-6 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                    <div className="text-left lg:text-right">
-                      <p className="text-[10px] uppercase font-bold text-slate-400">
-                        Solde Restant Dû
+                  {/* Actions & Finances */}
+                  <div className="flex items-center gap-4 self-end lg:self-auto">
+                    <div className="text-right">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase">
+                        Solde Patient
                       </p>
                       <p
-                        className={`text-sm font-black font-mono ${
+                        className={`font-mono text-sm font-black ${
                           remainingDue > 0 ? 'text-rose-600' : 'text-emerald-600'
                         }`}
                       >
@@ -216,19 +253,18 @@ export default function PatientsListPage() {
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <QuickContactButtons
-                        phone={p.phone}
-                        patientName={`${p.firstName} ${p.lastName}`}
-                      />
+                    <QuickContactButtons
+                      phone={p.phone}
+                      patientName={`${p.firstName} ${p.lastName}`}
+                    />
 
-                      <Link
-                        href={`/dashboard/patients/${p.id}`}
-                        className="px-3 py-1.5 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors shadow-sm"
-                      >
-                        Ouvrir Dossier 360°
-                      </Link>
-                    </div>
+                    <Link
+                      href={`/dashboard/patients/${p.id}`}
+                      className="p-2.5 rounded-xl bg-slate-100 hover:bg-sky-50 text-slate-600 hover:text-sky-600 transition-colors"
+                      title="Ouvrir le dossier 360°"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </Link>
                   </div>
                 </div>
               );

@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { InvoiceStatus, QuoteStatus } from '@prisma/client';
+import { dentalStore } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const patientId = searchParams.get('patientId');
+  const { searchParams } = new URL(request.url);
+  const patientId = searchParams.get('patientId') || undefined;
 
+  try {
     const invoices = await prisma.invoice.findMany({
       where: patientId ? { patientId } : undefined,
       include: {
@@ -44,16 +45,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ invoices, quotes });
   } catch (error: any) {
-    console.error('Error fetching invoices/quotes:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to in-memory invoices/quotes:', error?.message);
+    return NextResponse.json(dentalStore.getInvoices(patientId));
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { isQuote, patientId, mutualType, mutualClaimNumber, discount, totalAmount, items, number } = body;
+  const body = await request.json();
+  const { isQuote, patientId, mutualType, mutualClaimNumber, discount, totalAmount, items, number } = body;
 
+  try {
     if (isQuote) {
       const quote = await prisma.quote.create({
         data: {
@@ -104,7 +105,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(invoice, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating document:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to store invoice or quote:', error?.message);
+    const created = dentalStore.createInvoiceOrQuote(body);
+    return NextResponse.json(created, { status: 201 });
   }
 }

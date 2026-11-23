@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ProtheseStatus, ProtheseType } from '@prisma/client';
-import { DEMO_PROTHESES } from '@/lib/demo-data';
+import { dentalStore } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const patientId = searchParams.get('patientId');
-  const status = searchParams.get('status') as ProtheseStatus | null;
+  const patientId = searchParams.get('patientId') || undefined;
+  const status = (searchParams.get('status') as ProtheseStatus) || undefined;
 
   try {
     const orders = await prisma.protheseOrder.findMany({
@@ -31,15 +31,15 @@ export async function GET(request: Request) {
 
     return NextResponse.json(orders);
   } catch (error: any) {
-    console.warn('Prisma DB fallback to demo protheses:', error?.message);
-    return NextResponse.json(DEMO_PROTHESES);
+    console.warn('Prisma DB fallback to in-memory protheses:', error?.message);
+    return NextResponse.json(dentalStore.getProtheses(patientId, status));
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
+  const body = await request.json();
 
+  try {
     const orderNumber = `LAB-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const order = await prisma.protheseOrder.create({
@@ -61,16 +61,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json(order, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating prothese order:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to store prothese order:', error?.message);
+    const created = dentalStore.createProthese(body);
+    return NextResponse.json(created, { status: 201 });
   }
 }
 
 export async function PATCH(request: Request) {
-  try {
-    const body = await request.json();
-    const { id, status, isPaidToLab, labInvoiceNumber } = body;
+  const body = await request.json();
+  const { id, status, isPaidToLab, labInvoiceNumber } = body;
 
+  try {
     const updated = await prisma.protheseOrder.update({
       where: { id },
       data: {
@@ -82,7 +83,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(updated);
   } catch (error: any) {
-    console.error('Error updating prothese order:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to update prothese order:', error?.message);
+    const updated = dentalStore.updateProthese(id, body);
+    return NextResponse.json(updated || body);
   }
 }

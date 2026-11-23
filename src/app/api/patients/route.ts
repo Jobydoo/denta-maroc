@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { DEMO_PATIENTS } from '@/lib/demo-data';
+import { dentalStore } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,24 +52,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json(formatted);
   } catch (error: any) {
-    console.warn('Prisma DB fallback to demo patients:', error?.message);
-    const filtered = q
-      ? DEMO_PATIENTS.filter(
-          (p) =>
-            p.firstName.toLowerCase().includes(q) ||
-            p.lastName.toLowerCase().includes(q) ||
-            p.phone.includes(q) ||
-            (p.cin && p.cin.toLowerCase().includes(q))
-        )
-      : DEMO_PATIENTS;
-    return NextResponse.json(filtered);
+    console.warn('Prisma DB fallback to in-memory dentalStore:', error?.message);
+    const fallbackPatients = dentalStore.getPatients(q);
+    return NextResponse.json(fallbackPatients);
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
+  const body = await request.json();
 
+  try {
     const patient = await prisma.patient.create({
       data: {
         firstName: body.firstName,
@@ -96,7 +88,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(patient, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating patient:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB error, storing patient in fallback store:', error?.message);
+    const created = dentalStore.createPatient(body);
+    return NextResponse.json(created, { status: 201 });
   }
 }

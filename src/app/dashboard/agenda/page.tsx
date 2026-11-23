@@ -44,6 +44,12 @@ export default function AgendaPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   // Nouveau RDV State
   const [newPatientName, setNewPatientName] = useState('');
@@ -89,14 +95,40 @@ export default function AgendaPage() {
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const tempId = `appt-${Date.now()}`;
+    const pFirst = newPatientName.trim().split(' ')[0] || 'Patient';
+    const pLast = newPatientName.trim().split(' ').slice(1).join(' ') || 'Cabinet';
+
+    const optimisticAppt: AppointmentItem = {
+      id: tempId,
+      patientId: `pat-${Date.now()}`,
+      patient: {
+        id: `pat-${Date.now()}`,
+        firstName: pFirst,
+        lastName: pLast,
+        phone: newPatientPhone,
+      },
+      title: newTitle,
+      date: new Date(newDate).toISOString(),
+      startTime: newStartTime,
+      endTime: '11:00',
+      status: 'PLANIFIE' as AppointmentStatus,
+      careType: newCareType,
+      notes: newNotes,
+    };
+
+    setAppointments((prev) => [optimisticAppt, ...prev]);
+    setIsNewModalOpen(false);
+    showToast(`✓ Rendez-vous programmé pour ${pFirst} ${pLast} à ${newStartTime} !`);
+
     try {
-      // Create quick patient or find first
       const patRes = await fetch('/api/patients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firstName: newPatientName.split(' ')[0] || 'Patient',
-          lastName: newPatientName.split(' ').slice(1).join(' ') || 'Rendez-vous',
+          firstName: pFirst,
+          lastName: pLast,
           phone: newPatientPhone,
           dateOfBirth: '1990-01-01',
         }),
@@ -117,9 +149,6 @@ export default function AgendaPage() {
           notes: newNotes,
         }),
       });
-
-      setIsNewModalOpen(false);
-      fetchAppointments();
     } catch (e) {
       console.error(e);
     }
@@ -131,7 +160,15 @@ export default function AgendaPage() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 font-bold text-xs animate-bounce">
+          <CheckCircle className="w-5 h-5 text-emerald-200" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

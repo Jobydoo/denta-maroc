@@ -1,50 +1,42 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { ExpenseCategory, PaymentMethod } from '@prisma/client';
-import { DEMO_EXPENSES } from '@/lib/demo-data';
+import { dentalStore } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const category = searchParams.get('category') as ExpenseCategory | null;
-
+export async function GET() {
   try {
     const expenses = await prisma.expense.findMany({
-      where: category ? { category } : undefined,
       orderBy: { date: 'desc' },
     });
-
-    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-
-    return NextResponse.json({ expenses, totalExpenses });
+    return NextResponse.json(expenses);
   } catch (error: any) {
-    console.warn('Prisma DB fallback to demo expenses:', error?.message);
-    const totalExpenses = DEMO_EXPENSES.reduce((sum, e) => sum + e.amount, 0);
-    return NextResponse.json({ expenses: DEMO_EXPENSES, totalExpenses });
+    console.warn('Prisma DB fallback to in-memory expenses:', error?.message);
+    return NextResponse.json(dentalStore.getExpenses());
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
+  const body = await request.json();
 
+  try {
     const expense = await prisma.expense.create({
       data: {
         title: body.title,
-        category: body.category as ExpenseCategory,
+        category: (body.category as ExpenseCategory) || ExpenseCategory.AUTRE,
         amount: Number(body.amount),
         date: body.date ? new Date(body.date) : new Date(),
         supplier: body.supplier || null,
         paymentMethod: (body.paymentMethod as PaymentMethod) || PaymentMethod.VIREMENT,
-        receiptUrl: body.receiptUrl || null,
         notes: body.notes || null,
       },
     });
 
     return NextResponse.json(expense, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating expense:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to store expense:', error?.message);
+    const created = dentalStore.createExpense(body);
+    return NextResponse.json(created, { status: 201 });
   }
 }

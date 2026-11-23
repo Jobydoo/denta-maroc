@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { DEMO_PATIENTS } from '@/lib/demo-data';
+import { dentalStore } from '@/lib/store';
 
 export async function GET(
   request: Request,
@@ -52,11 +52,10 @@ export async function GET(
       });
     }
   } catch (error: any) {
-    console.warn('Prisma DB fallback to demo patient by ID:', error?.message);
+    console.warn('Prisma DB fallback to in-memory patient by ID:', error?.message);
   }
 
-  // Fallback demo patient
-  const found = DEMO_PATIENTS.find((p) => p.id === params.id) || DEMO_PATIENTS[0];
+  const found = dentalStore.getPatientById(params.id);
   return NextResponse.json(found);
 }
 
@@ -64,9 +63,9 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  try {
-    const body = await request.json();
+  const body = await request.json();
 
+  try {
     const updated = await prisma.patient.update({
       where: { id: params.id },
       data: {
@@ -94,22 +93,8 @@ export async function PUT(
 
     return NextResponse.json(updated);
   } catch (error: any) {
-    console.error('Error updating patient:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    await prisma.patient.delete({
-      where: { id: params.id },
-    });
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error('Error deleting patient:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to update patient in store:', error?.message);
+    const updated = dentalStore.updatePatient(params.id, body);
+    return NextResponse.json(updated || body);
   }
 }

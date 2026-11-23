@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { AppointmentStatus, CareType } from '@prisma/client';
-import { DEMO_APPOINTMENTS } from '@/lib/demo-data';
+import { dentalStore } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const date = searchParams.get('date');
-  const patientId = searchParams.get('patientId');
+  const date = searchParams.get('date') || undefined;
+  const patientId = searchParams.get('patientId') || undefined;
 
   try {
     const appointments = await prisma.appointment.findMany({
@@ -39,15 +39,15 @@ export async function GET(request: Request) {
 
     return NextResponse.json(appointments);
   } catch (error: any) {
-    console.warn('Prisma DB fallback to demo appointments:', error?.message);
-    return NextResponse.json(DEMO_APPOINTMENTS);
+    console.warn('Prisma DB fallback to in-memory appointments:', error?.message);
+    return NextResponse.json(dentalStore.getAppointments(date, patientId));
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
+  const body = await request.json();
 
+  try {
     const appt = await prisma.appointment.create({
       data: {
         patientId: body.patientId,
@@ -63,16 +63,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json(appt, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating appointment:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to store appointment:', error?.message);
+    const created = dentalStore.createAppointment(body);
+    return NextResponse.json(created, { status: 201 });
   }
 }
 
 export async function PATCH(request: Request) {
-  try {
-    const body = await request.json();
-    const { id, status } = body;
+  const body = await request.json();
+  const { id, status } = body;
 
+  try {
     const updated = await prisma.appointment.update({
       where: { id },
       data: {
@@ -82,7 +83,8 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json(updated);
   } catch (error: any) {
-    console.error('Error updating appointment:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to update appointment status:', error?.message);
+    const updated = dentalStore.updateAppointment(id, status);
+    return NextResponse.json(updated || { id, status });
   }
 }

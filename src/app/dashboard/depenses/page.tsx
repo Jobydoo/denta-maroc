@@ -9,6 +9,12 @@ export default function DepensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<ExpenseCategory>('FOURNITURES_DENTAIRES');
   const [amount, setAmount] = useState<number>(1500);
@@ -35,6 +41,24 @@ export default function DepensesPage() {
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const tempId = `exp-${Date.now()}`;
+    const optimisticExp = {
+      id: tempId,
+      title,
+      category,
+      amount: Number(amount),
+      supplier: supplier || null,
+      paymentMethod: method,
+      notes: notes || null,
+      date: new Date().toISOString(),
+    };
+
+    setExpenses((prev) => [optimisticExp, ...prev]);
+    setIsAddOpen(false);
+    showToast(`✓ Dépense de ${amount} MAD enregistrée avec succès !`);
+    setTitle('');
+
     try {
       await fetch('/api/expenses', {
         method: 'POST',
@@ -48,16 +72,21 @@ export default function DepensesPage() {
           notes,
         }),
       });
-      setIsAddOpen(false);
-      setTitle('');
-      fetchExpenses();
     } catch (e) {
       console.error(e);
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 font-bold text-xs animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

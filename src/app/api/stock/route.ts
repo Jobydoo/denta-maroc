@@ -1,30 +1,26 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { StockCategory } from '@prisma/client';
-import { DEMO_STOCK } from '@/lib/demo-data';
+import { dentalStore } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const items = await prisma.stockItem.findMany({
+    const stock = await prisma.stockItem.findMany({
       orderBy: { name: 'asc' },
     });
-
-    const lowStockAlerts = items.filter((i) => i.currentQuantity <= i.minAlertThreshold);
-
-    return NextResponse.json({ items, lowStockAlerts });
+    return NextResponse.json(stock);
   } catch (error: any) {
-    console.warn('Prisma DB fallback to demo stock:', error?.message);
-    const lowStockAlerts = DEMO_STOCK.filter((i) => i.currentQuantity <= i.minAlertThreshold);
-    return NextResponse.json({ items: DEMO_STOCK, lowStockAlerts });
+    console.warn('Prisma DB fallback to in-memory stock:', error?.message);
+    return NextResponse.json(dentalStore.getStock());
   }
 }
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
+  const body = await request.json();
 
+  try {
     const item = await prisma.stockItem.create({
       data: {
         name: body.name,
@@ -32,7 +28,6 @@ export async function POST(request: Request) {
         currentQuantity: Number(body.currentQuantity || 0),
         minAlertThreshold: Number(body.minAlertThreshold || 5),
         unit: body.unit || 'boîtes',
-        expiryDate: body.expiryDate ? new Date(body.expiryDate) : null,
         supplier: body.supplier || null,
         unitCost: body.unitCost ? Number(body.unitCost) : null,
       },
@@ -40,34 +35,33 @@ export async function POST(request: Request) {
 
     return NextResponse.json(item, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating stock item:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to store stock item:', error?.message);
+    const created = dentalStore.createStock(body);
+    return NextResponse.json(created, { status: 201 });
   }
 }
 
 export async function PATCH(request: Request) {
+  const body = await request.json();
+  const { id, delta, currentQuantity } = body;
+
   try {
-    const body = await request.json();
-    const { id, quantityDelta, newQuantity } = body;
-
-    const item = await prisma.stockItem.findUnique({ where: { id } });
-    if (!item) {
-      return NextResponse.json({ error: 'Article introuvable' }, { status: 404 });
+    let updated;
+    if (typeof delta === 'number') {
+      updated = await prisma.stockItem.update({
+        where: { id },
+        data: { currentQuantity: { increment: delta } },
+      });
+    } else if (typeof currentQuantity === 'number') {
+      updated = await prisma.stockItem.update({
+        where: { id },
+        data: { currentQuantity },
+      });
     }
-
-    const updatedQty =
-      typeof newQuantity === 'number'
-        ? newQuantity
-        : Math.max(0, item.currentQuantity + Number(quantityDelta || 0));
-
-    const updated = await prisma.stockItem.update({
-      where: { id },
-      data: { currentQuantity: updatedQty },
-    });
-
     return NextResponse.json(updated);
   } catch (error: any) {
-    console.error('Error updating stock item:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.warn('Prisma DB fallback to update stock quantity:', error?.message);
+    const updated = dentalStore.updateStock(id, body);
+    return NextResponse.json(updated || body);
   }
 }

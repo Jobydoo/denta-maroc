@@ -23,7 +23,8 @@ import {
   CreditCard,
   Plus,
   Printer,
-  ChevronLeft
+  ChevronLeft,
+  CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -43,6 +44,12 @@ export default function PatientProfilePage() {
   const [isQuoteMode, setIsQuoteMode] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isProtheseOpen, setIsProtheseOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const fetchPatient = async () => {
     try {
@@ -82,6 +89,50 @@ export default function PatientProfilePage() {
   }
 
   const handleSaveTooth = async (data: any) => {
+    // Mise à jour optimiste
+    setPatient((prev: any) => {
+      if (!prev) return prev;
+      const tcList = prev.teethConditions ? [...prev.teethConditions] : [];
+      const idx = tcList.findIndex((tc: any) => tc.toothNumber === Number(data.toothNumber));
+      const updatedTc = {
+        id: `tc-${Date.now()}`,
+        patientId,
+        toothNumber: Number(data.toothNumber),
+        status: data.status,
+        surfaces: data.surfaces ? JSON.stringify(data.surfaces) : null,
+        notes: data.notes || null,
+      };
+      if (idx !== -1) {
+        tcList[idx] = updatedTc;
+      } else {
+        tcList.push(updatedTc);
+      }
+
+      const treatments = prev.treatments ? [...prev.treatments] : [];
+      if (data.newProcedure) {
+        treatments.unshift({
+          id: `trt-${Date.now()}`,
+          patientId,
+          toothNumber: Number(data.toothNumber),
+          procedureName: data.newProcedure,
+          price: Number(data.newPrice || 0),
+          category: 'SOINS_CONSERVATEURS',
+          date: new Date().toISOString(),
+          status: 'TERMINE',
+          clinicalNotes: data.notes || null,
+          practitioner: { name: 'Dr. Mehdi Alami' },
+        });
+      }
+
+      return {
+        ...prev,
+        teethConditions: tcList,
+        treatments,
+      };
+    });
+
+    showToast(`✓ Dent #${data.toothNumber} mise à jour (${data.status}) !`);
+
     try {
       await fetch('/api/odontogram', {
         method: 'POST',
@@ -91,26 +142,94 @@ export default function PatientProfilePage() {
           patientId,
         }),
       });
-      fetchPatient();
     } catch (e) {
       console.error(e);
     }
   };
 
   const handleSaveInvoiceOrQuote = async (data: any) => {
+    setPatient((prev: any) => {
+      if (!prev) return prev;
+      if (data.isQuote) {
+        const quotes = prev.quotes ? [...prev.quotes] : [];
+        quotes.unshift({
+          id: `q-${Date.now()}`,
+          quoteNumber: data.number || `DEV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+          patientId,
+          finalAmount: Number(data.totalAmount),
+          discount: Number(data.discount || 0),
+          totalAmount: Number(data.totalAmount + (data.discount || 0)),
+          status: 'EN_ATTENTE',
+          createdAt: new Date().toISOString(),
+          validUntil: new Date(Date.now() + 30 * 86400000).toISOString(),
+          items: data.items || [],
+        });
+        return { ...prev, quotes };
+      } else {
+        const invoices = prev.invoices ? [...prev.invoices] : [];
+        const newTotalInvoiced = (prev.totalInvoiced || 0) + Number(data.totalAmount);
+        const newRemaining = (prev.remainingDue || 0) + Number(data.totalAmount);
+        invoices.unshift({
+          id: `inv-${Date.now()}`,
+          invoiceNumber: data.number || `FAC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+          patientId,
+          totalAmount: Number(data.totalAmount),
+          paidAmount: 0,
+          remainingAmount: Number(data.totalAmount),
+          status: 'IMPAYEE',
+          mutualType: data.mutualType,
+          issueDate: new Date().toISOString(),
+          items: data.items || [],
+        });
+        return {
+          ...prev,
+          invoices,
+          totalInvoiced: newTotalInvoiced,
+          remainingDue: newRemaining,
+        };
+      }
+    });
+
+    showToast(`✓ ${data.isQuote ? 'Devis' : 'Facture'} ${data.number} généré(e) avec succès !`);
+
     try {
       await fetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      fetchPatient();
     } catch (e) {
       console.error(e);
     }
   };
 
   const handleSavePayment = async (data: any) => {
+    const amt = Number(data.amount || 0);
+    setPatient((prev: any) => {
+      if (!prev) return prev;
+      const payments = prev.payments ? [...prev.payments] : [];
+      payments.unshift({
+        id: `pmt-${Date.now()}`,
+        paymentNumber: `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        patientId,
+        amount: amt,
+        method: data.method || 'ESPECES',
+        checkNumber: data.checkNumber || null,
+        checkBank: data.checkBank || null,
+        paymentDate: new Date().toISOString(),
+        notes: data.notes || null,
+      });
+
+      return {
+        ...prev,
+        payments,
+        totalPaid: (prev.totalPaid || 0) + amt,
+        remainingDue: Math.max(0, (prev.remainingDue || 0) - amt),
+      };
+    });
+
+    showToast(`✓ Paiement de ${amt} MAD enregistré avec succès !`);
+
     try {
       await fetch('/api/payments', {
         method: 'POST',
@@ -120,20 +239,42 @@ export default function PatientProfilePage() {
           patientId,
         }),
       });
-      fetchPatient();
     } catch (e) {
       console.error(e);
     }
   };
 
   const handleSaveProthese = async (data: any) => {
+    setPatient((prev: any) => {
+      if (!prev) return prev;
+      const protheses = prev.protheses ? [...prev.protheses] : [];
+      protheses.unshift({
+        id: `proth-${Date.now()}`,
+        orderNumber: `LAB-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        patientId,
+        labName: data.labName || 'Laboratoire Atlas Dental Casablanca',
+        protheseType: data.protheseType,
+        teethNumbers: data.teethNumbers,
+        vitaShade: data.vitaShade || 'A2',
+        status: data.status || 'EMPREINTE_PRISE',
+        impressionDate: new Date().toISOString(),
+        tryInDate: data.tryInDate || null,
+        deliveryDate: data.deliveryDate || null,
+        clinicPrice: Number(data.clinicPrice || 0),
+        labCost: Number(data.labCost || 0),
+        instructions: data.instructions || null,
+      });
+      return { ...prev, protheses };
+    });
+
+    showToast(`✓ Commande prothèse enregistrée au dossier !`);
+
     try {
       await fetch('/api/protheses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      fetchPatient();
     } catch (e) {
       console.error(e);
     }
@@ -149,7 +290,15 @@ export default function PatientProfilePage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 font-bold text-xs animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Return link & Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">

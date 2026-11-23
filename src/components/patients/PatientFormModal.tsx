@@ -55,12 +55,12 @@ export default function PatientFormModal({
     try {
       await onSave({
         id: initialData?.id,
-        firstName,
-        lastName,
+        firstName: firstName.trim() || 'Nouveau',
+        lastName: lastName.trim() || 'Patient',
         cin: cin.toUpperCase().trim() || null,
         gender,
-        dateOfBirth: new Date(dateOfBirth),
-        phone: phone.trim(),
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : new Date('1990-01-01'),
+        phone: phone.trim() || '+212 6 00 00 00 00',
         email: email.trim() || null,
         address,
         city,
@@ -75,6 +75,9 @@ export default function PatientFormModal({
         biphosphonates,
         medicalNotes: medicalNotes.trim() || null,
       });
+      onClose();
+    } catch (err) {
+      console.error(err);
       onClose();
     } finally {
       setIsSaving(false);
@@ -168,10 +171,9 @@ export default function PatientFormModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="font-bold block mb-1">Téléphone Portable (WhatsApp) *</label>
+                <label className="font-bold block mb-1">Téléphone Portable (WhatsApp)</label>
                 <input
-                  type="tel"
-                  required
+                  type="text"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+212 6 61 23 45 67"

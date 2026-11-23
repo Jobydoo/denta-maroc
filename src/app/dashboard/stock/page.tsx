@@ -7,6 +7,12 @@ import { Package, Plus, AlertTriangle, CheckCircle2, Minus } from 'lucide-react'
 export default function StockPage() {
   const [items, setItems] = useState<any[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
   const [name, setName] = useState('');
   const [category, setCategory] = useState<StockCategory>('ANESTHESIE');
   const [qty, setQty] = useState(10);
@@ -40,7 +46,7 @@ export default function StockPage() {
       await fetch('/api/stock', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, quantityDelta: delta }),
+        body: JSON.stringify({ id, delta, quantityDelta: delta }),
       });
     } catch (e) {
       console.error(e);
@@ -49,6 +55,23 @@ export default function StockPage() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const tempId = `stk-${Date.now()}`;
+    const newItem = {
+      id: tempId,
+      name,
+      category,
+      currentQuantity: qty,
+      minAlertThreshold: threshold,
+      unit,
+      supplier,
+    };
+
+    setItems((prev) => [newItem, ...prev]);
+    setIsAddOpen(false);
+    showToast(`✓ Produit "${name}" ajouté au stock !`);
+    setName('');
+
     try {
       await fetch('/api/stock', {
         method: 'POST',
@@ -62,16 +85,21 @@ export default function StockPage() {
           supplier,
         }),
       });
-      setIsAddOpen(false);
-      setName('');
-      fetchStock();
     } catch (e) {
       console.error(e);
     }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 font-bold text-xs animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">

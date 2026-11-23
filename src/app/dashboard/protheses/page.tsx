@@ -50,6 +50,12 @@ export default function ProthesesPage() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const fetchOrders = async () => {
     try {
@@ -85,13 +91,46 @@ export default function ProthesesPage() {
   };
 
   const handleCreateOrder = async (data: any) => {
-    const res = await fetch('/api/protheses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) {
-      fetchOrders();
+    const tempId = `proth-${Date.now()}`;
+    const optimisticOrder: OrderItem = {
+      id: tempId,
+      orderNumber: `LAB-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+      patient: {
+        id: data.patientId || 'pat-1',
+        firstName: 'Patient',
+        lastName: 'Sélectionné',
+      },
+      labName: data.labName || 'Laboratoire Atlas Dental Casablanca',
+      protheseType: data.protheseType,
+      teethNumbers: data.teethNumbers,
+      vitaShade: data.vitaShade || 'A2',
+      status: data.status || 'EMPREINTE_PRISE',
+      impressionDate: new Date().toISOString(),
+      tryInDate: data.tryInDate || null,
+      deliveryDate: data.deliveryDate || null,
+      clinicPrice: Number(data.clinicPrice || 0),
+      labCost: Number(data.labCost || 0),
+      instructions: data.instructions || null,
+      isPaidToLab: false,
+    };
+
+    setOrders((prev) => [optimisticOrder, ...prev]);
+    showToast(`✓ Bon de commande prothèse ${data.protheseType} créé avec succès !`);
+
+    try {
+      const res = await fetch('/api/protheses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setOrders((prev) =>
+          prev.map((o) => (o.id === tempId ? { ...optimisticOrder, ...saved } : o))
+        );
+      }
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -102,7 +141,15 @@ export default function ProthesesPage() {
   const margeMoyennePct = totalFacturePatients > 0 ? Math.round((margeGlobale / totalFacturePatients) * 100) : 0;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 font-bold text-xs animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
